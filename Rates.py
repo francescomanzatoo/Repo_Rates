@@ -56,9 +56,9 @@ def equivalentValue():
     print("\nEquivalent value for currency in EUR: ")
     for row in eqvValue:
         currency = row["currency"]
-        valEUR = row["expVal"]
-        valCurr = row["eqvVal"]
-        print(f"{currency}: {valEUR} EUR correspond to {valCurr} {currency}")
+        valCurr = row["expVal"]
+        valEur = row["eqvVal"]
+        print(f"{currency}: {valEur} EUR correspond to {valCurr} {currency}")
 
 def what_if(currency, percentage_change):
     cursor.execute("""SELECT exchange FROM rates
@@ -68,7 +68,7 @@ def what_if(currency, percentage_change):
     cursor.execute("""SELECT SUM(amount) FROM positions
                    WHERE currency = ?""", (currency,))
     amount = cursor.fetchone()[0]
-    ifRate = cacheRate * (1 + int(percentage_change)/100)
+    ifRate = cacheRate * (1 + percentage_change/100)
     actualValue = amount / cacheRate
     ifEqvVal = amount / ifRate
     deltaVar = ifEqvVal - actualValue
