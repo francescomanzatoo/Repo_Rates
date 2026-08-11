@@ -37,4 +37,4 @@ streamlit run rates_App.py
 
 ## Screenshot
 
-![Dashboard](screenshot.png)
+![Dashboard](Screenshot.png)
