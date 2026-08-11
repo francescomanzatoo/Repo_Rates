@@ -6,7 +6,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-
+#insertion of random amount per currency just for the simulation
 def positionsInsert():
     for i in range(15):
         amount = random.randint(5, 250) * 1000
@@ -33,6 +33,7 @@ def save_hist_rates():
         hist_dataAPI = hist_response.json()
         ratesInsert(hist_dataAPI)
 
+#insertion of the rates taken from the Frankfurter API
 def ratesInsert(rates_dataAPI):
     for row in rates_dataAPI:
         cursor.execute("""INSERT INTO rates 
@@ -67,6 +68,7 @@ def equivalentValue():
         GROUP BY p.currency
         """, connection)
 
+#Comparision between historical and actual exchange rates
 def valueComparision():
     return pd.read_sql_query("""
         SELECT p.currency, p.data, p.amount, 
@@ -80,6 +82,7 @@ def valueComparision():
                     AND r_now.data = (SELECT MAX(data) FROM rates)
         """, connection)
 
+#definition of the what-if scenario
 def what_if(currency, percentage_change):
     cursor.execute("""SELECT exchange FROM rates
                    WHERE currency = ?
@@ -118,16 +121,17 @@ cursor.execute("""
 
 #saving all the DB updates
 connection.commit()
-
 descriptionAvailable = ["Supplier invoice", "Client payment", "expense account", 
                         "Deposit agreement", "Assets amortization", "Sale order"]
 currencyAvailable = ["USD", "GBP"]
+
 #Adding data to the empty DB
 cursor.execute("SELECT COUNT(*) FROM positions")
 if (cursor.fetchone()[0] == 0): 
     positionsInsert()
     save_hist_rates()
 
+#checking if the actual rate in DB is the most updated one
 cursor.execute("SELECT MAX(data) FROM rates")
 lastDateChange = cursor.fetchone()[0]
 if (date.today().isoformat() != lastDateChange):
@@ -157,6 +161,7 @@ graph_cmp.update_layout(bargap = 0.6)
 col1, col2 = st.columns(2)
 col1.plotly_chart(graph_eqv)
 col2.plotly_chart(graph_cmp)
+
 tab1, tab2, tab3 = st.tabs(["Exposure", "Equivalent Value", "What-if"])
 with tab1:
     st.subheader("Exposure for currency ")
