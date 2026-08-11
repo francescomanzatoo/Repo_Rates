@@ -18,9 +18,9 @@ def positionsInsert():
                     (currency, amount, data.isoformat(), description))
     connection.commit()
 
-def ratesInsert():
-    for row in dataAPI:
-        cursor.execute("""INSERT INTO rates 
+def ratesInsert(rates_dataAPI):
+    for row in rates_dataAPI:
+        cursor.execute("""INSERT OR IGNORE INTO rates 
                        (currency, data, exchange) 
                        VALUES (?, ?, ?)""", 
                        (row["quote"], row["date"], row["rate"]))
@@ -110,7 +110,21 @@ descriptionAvailable = ["Supplier invoice", "Client payment", "expense account",
 currencyAvailable = ["USD", "GBP"]
 #Adding data to the empty DB
 cursor.execute("SELECT COUNT(*) FROM positions")
-if (cursor.fetchone()[0] == 0): positionsInsert()
+if (cursor.fetchone()[0] == 0): 
+    positionsInsert()
+
+    #Saving all the historical rates for the occurrences in positions
+    cursor.execute("SELECT DISTINCT data FROM positions")
+    download_date = cursor.fetchall()
+    for row in download_date:
+        hist_date = row["data"]
+        hist_response = requests.get("https://api.frankfurter.dev/v2/rates",
+                                    params = {"base": "EUR", 
+                                            "quotes": "USD,GBP", 
+                                            "date": hist_date})
+        hist_dataAPI = hist_response.json()
+        ratesInsert(hist_dataAPI)
+
 cursor.execute("SELECT * FROM positions")
 rows = cursor.fetchall()
 for row in rows:
@@ -122,7 +136,7 @@ if (date.today().isoformat() != lastDateChange):
     response = requests.get("https://api.frankfurter.dev/v2/rates", 
                         params = {"base": "EUR", "quotes": "USD,GBP"})
     dataAPI = response.json()
-    ratesInsert()
+    ratesInsert(dataAPI)
     print("\nExchange rates has changed:")
 else: print("\nExchange rate has not changed from [" + lastDateChange + "]:")
 
@@ -135,6 +149,22 @@ for row in rows:
 
 currencyExposure()
 equivalentValue()
+
+#Comparision between historical currency rates and actual rates
+cursor.execute("""SELECT p.currency, p.data, p.amount, 
+                ROUND(p.amount / r_ins.exchange, 2) AS initial_value, 
+                ROUND(p.amount / r_now.exchange, 2) AS actual_value, 
+                ROUND(p.amount / r_now.exchange - p.amount / r_ins.exchange, 2) AS pnl
+                FROM positions p
+                LEFT JOIN rates AS r_ins ON r_ins.currency = p.currency
+                            AND r_ins.data = p.data
+                JOIN rates AS r_now ON r_now.currency = p.currency
+                            AND r_now.data = (SELECT MAX(data) FROM rates)""")
+comp = cursor.fetchall()
+print("\nActual amounts compared with historical amount:")
+for row in comp:
+    print(f"{row['currency']}: Actual = {row['actual_value']} / Initial = {row['initial_value']}")
+
 ifCurrency = 'USD'
 what_if(ifCurrency, 3)
 

@@ -20,13 +20,26 @@ def positionsInsert():
                     (currency, amount, data.isoformat(), description))
     connection.commit()
 
-def ratesInsert():
-    for row in dataAPI:
+#Saving all the historical rates for the occurrences in positions
+def save_hist_rates():
+    cursor.execute("SELECT DISTINCT data FROM positions")
+    download_date = cursor.fetchall()
+    for row in download_date:
+        hist_date = row["data"]
+        hist_response = requests.get("https://api.frankfurter.dev/v2/rates",
+                                    params = {"base": "EUR", 
+                                            "quotes": "USD,GBP", 
+                                            "date": hist_date})
+        hist_dataAPI = hist_response.json()
+        ratesInsert(hist_dataAPI)
+
+def ratesInsert(rates_dataAPI):
+    for row in rates_dataAPI:
         cursor.execute("""INSERT INTO rates 
                        (currency, data, exchange) 
                        VALUES (?, ?, ?)""", 
                        (row["quote"], row["date"], row["rate"]))
-    connection.commit()    
+    connection.commit()
 
 #computing of the exposure: for all the currency, sum of all the value
 def currencyExposure():
@@ -52,6 +65,19 @@ def equivalentValue():
         JOIN rates AS r 
         ON r.currency = p.currency AND r.data = (SELECT MAX(data) FROM rates) 
         GROUP BY p.currency
+        """, connection)
+
+def valueComparision():
+    return pd.read_sql_query("""
+        SELECT p.currency, p.data, p.amount, 
+        ROUND(p.amount / r_ins.exchange, 2) AS initial_value, 
+        ROUND(p.amount / r_now.exchange, 2) AS actual_value, 
+        ROUND(p.amount / r_now.exchange - p.amount / r_ins.exchange, 2) AS pnl
+        FROM positions p
+        JOIN rates AS r_ins ON r_ins.currency = p.currency
+                    AND r_ins.data = p.data
+        JOIN rates AS r_now ON r_now.currency = p.currency
+                    AND r_now.data = (SELECT MAX(data) FROM rates)
         """, connection)
 
 def what_if(currency, percentage_change):
@@ -82,7 +108,6 @@ cursor.execute("""
         data TEXT, 
         description TEXT
     )""")
-#ID, valuta, importo, data, descrizione
 cursor.execute("""
     CREATE TABLE IF NOT EXISTS rates (
         currency TEXT, 
@@ -90,7 +115,6 @@ cursor.execute("""
         exchange REAL,
         PRIMARY KEY (currency, data)
     )""")
-#valuta, data, tasso
 
 #saving all the DB updates
 connection.commit()
@@ -100,7 +124,9 @@ descriptionAvailable = ["Supplier invoice", "Client payment", "expense account",
 currencyAvailable = ["USD", "GBP"]
 #Adding data to the empty DB
 cursor.execute("SELECT COUNT(*) FROM positions")
-if (cursor.fetchone()[0] == 0): positionsInsert()
+if (cursor.fetchone()[0] == 0): 
+    positionsInsert()
+    save_hist_rates()
 
 cursor.execute("SELECT MAX(data) FROM rates")
 lastDateChange = cursor.fetchone()[0]
@@ -108,7 +134,7 @@ if (date.today().isoformat() != lastDateChange):
     response = requests.get("https://api.frankfurter.dev/v2/rates", 
                         params = {"base": "EUR", "quotes": "USD,GBP"})
     dataAPI = response.json()
-    ratesInsert()
+    ratesInsert(dataAPI)
 
 #streamlit for graphic dashboard representation
 st.set_page_config(page_title="FX Exposure Dashboard", page_icon="💱", layout="wide")
@@ -117,12 +143,20 @@ st.space("xsmall")
 ce = currencyExposure()
 de = descriptionExposure()
 eqv = equivalentValue()
+cmp = valueComparision()
 
-graph = px.bar(eqv, x="currency", y="EUR_value", title="Exposure in EUR for currency")
-graph.update_traces(width = 0.3)
-graph.update_layout(bargap = 0.7)
+graph_eqv = px.bar(eqv, x="currency", y="EUR_value", title="Exposure in EUR for currency")
+graph_eqv.update_layout(bargap = 0.7)
+pnl_val = cmp.groupby("currency")["pnl"].sum().reset_index()
+pnl_val["esito"] = pnl_val["pnl"].apply(lambda x: "Guadagno" if x >= 0 else "Perdita")
+graph_cmp = px.bar(pnl_val, x="currency", y="pnl",
+                   title="Profit/Loss per currency (EUR)",
+                   color="esito",
+                   color_discrete_map={"Guadagno": "green", "Perdita": "red"})
+graph_cmp.update_layout(bargap = 0.6)
 col1, col2 = st.columns(2)
-col1.plotly_chart(graph)
+col1.plotly_chart(graph_eqv)
+col2.plotly_chart(graph_cmp)
 tab1, tab2, tab3 = st.tabs(["Exposure", "Equivalent Value", "What-if"])
 with tab1:
     st.subheader("Exposure for currency ")
