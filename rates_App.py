@@ -36,7 +36,7 @@ def save_hist_rates():
 #insertion of the rates taken from the Frankfurter API
 def ratesInsert(rates_dataAPI):
     for row in rates_dataAPI:
-        cursor.execute("""INSERT INTO rates 
+        cursor.execute("""INSERT OR IGNORE INTO rates 
                        (currency, data, exchange) 
                        VALUES (?, ?, ?)""", 
                        (row["quote"], row["date"], row["rate"]))
@@ -76,7 +76,7 @@ def valueComparision():
         ROUND(p.amount / r_now.exchange, 2) AS actual_value, 
         ROUND(p.amount / r_now.exchange - p.amount / r_ins.exchange, 2) AS pnl
         FROM positions p
-        JOIN rates AS r_ins ON r_ins.currency = p.currency
+        LEFT JOIN rates AS r_ins ON r_ins.currency = p.currency
                     AND r_ins.data = p.data
         JOIN rates AS r_now ON r_now.currency = p.currency
                     AND r_now.data = (SELECT MAX(data) FROM rates)
@@ -170,7 +170,7 @@ with tab1:
     st.dataframe(de)
     st.space("xsmall")
 with tab2:
-    st.subheader("Equivalent value from EUR to currency ")
+    st.subheader("Equivalent value from currency to EUR ")
     st.dataframe(eqv)
     n = pd.read_sql_query("SELECT COUNT(*) AS n FROM positions", connection)["n"][0]
     col1, col2 = st.columns(2)
@@ -183,4 +183,4 @@ with tab3:
     pct = st.slider("Rate change in %:", -20.0, 20.0, 0.0)
     amount, actual, simulted, delta = what_if(sel, pct)
     st.metric(f"{amount:,.0f} {sel} correspond to ", f"{simulted:,.2f} EUR", f"{delta:+.2f}")
-st.caption(f"Tax rates by BCE taken from Frankfurter API, updated since {lastDateChange}")
+st.caption(f"ECB exchange rates taken from Frankfurter API, updated since {lastDateChange}")
