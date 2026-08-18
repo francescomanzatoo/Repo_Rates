@@ -3,6 +3,7 @@ FX Exposure Dashboard
 Interactive dashboard for monitoring the currency exposure of a multi-currency 
 portfolio, featuring EUR countervalue calculation, FX profit/loss analysis, and 
 what-if scenario simulation.
+https://reporates-3eelfdjofozcl9mcf77txk.streamlit.app
 
 ## Features
 
